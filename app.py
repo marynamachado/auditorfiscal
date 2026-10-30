@@ -8,6 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import agenda
 import carteira
+import sped
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
@@ -28,6 +29,7 @@ def connect():
     ''')
     agenda.migrate(db)
     carteira.migrate(db)
+    sped.migrate(db)
     return db
 
 def log(db, action):
@@ -97,6 +99,8 @@ def import_xml(db, period_id, xml):
     return {'imported': True}
 
 def mutate(db, action, data):
+    if action == 'sped_import': return sped.import_file(db,data,log)
+    if action == 'sped_compare': return sped.compare(db,int(data['sped_id']),log)
     if action.startswith('agenda_'):
         return agenda.mutate(db,action,data,log)
     if action == 'wallet':
@@ -143,26 +147,36 @@ def state(db):
         settlements.append({'period_id':p['id'],'debit':str(debit),'potential_credit':str(credit),'balance':str(max(debit-credit,Decimal(0)))})
     result['settlements']=settlements
     result.update(agenda.state(db))
+    result.update(sped.state(db))
     return result
 
 class Handler(BaseHTTPRequestHandler):
-    def respond(self, code, body, kind='application/json; charset=utf-8'):
+    def respond(self, code, body, kind='application/json; charset=utf-8', headers=None):
         raw = body if isinstance(body,bytes) else json.dumps(body,ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header('Content-Type',kind)
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Length',str(len(raw)))
+        for name,value in (headers or {}).items(): self.send_header(name,value)
         self.end_headers()
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path == '/api/carteira':
+        if self.path.startswith('/api/sped-report?'):
+            from urllib.parse import urlsplit, parse_qs
+            try:
+                ident=int(parse_qs(urlsplit(self.path).query)['id'][0])
+            except (ValueError,KeyError,IndexError):return self.respond(400,{'error':'Relatório inválido'})
+            with connect() as db: row=db.execute('SELECT report,created FROM sped_audits WHERE id=?',(ident,)).fetchone()
+            if not row:return self.respond(404,{'error':'Relatório não encontrado'})
+            return self.respond(200,sped.report_csv(json.loads(row['report']),row['created']),'text/csv; charset=utf-8',{'Content-Disposition':f'attachment; filename="conferencia-sped-{ident}.csv"'})
+        elif self.path == '/api/carteira':
             with connect() as db: self.respond(200,carteira.read(db))
         elif self.path == '/api/agenda-backup':
             with connect() as db: self.respond(200,agenda.backup(db))
         elif self.path == '/api/state':
             with connect() as db: self.respond(200,state(db))
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
@@ -173,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(403,{'error':'Origem não permitida'})
         try:
             size = int(self.headers.get('Content-Length','0'))
-            if size>6_000_000: raise ValueError('Arquivo muito grande')
+            if size>(30_000_000 if self.path=='/api/sped_import' else 6_000_000): raise ValueError('Arquivo muito grande')
             data = json.loads(self.rfile.read(size))
             with connect() as db:
                 if self.path == '/api/carteira': result = carteira.save(db,data['state'],data['revision'],log)

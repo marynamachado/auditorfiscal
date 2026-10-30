@@ -13,7 +13,7 @@ No macOS/Linux: dentro da pasta, execute `python3 app.py` e abra o mesmo endere�
 
 ## Primeiro uso
 
-Cadastre uma carteira e seu responsável, depois uma empresa com CNPJ válido. Abra a competência do mês e importe uma NF-e modelo 55 da empresa e do mesmo mês. Confira notas, itens e alertas antes de fechar. Duplicidades são bloqueadas e registradas. Competências com alertas ou sem notas não podem ser fechadas. A resolução de alertas ainda não está disponível.
+Cadastre uma carteira e seu responsável, depois uma empresa com CNPJ válido. Abra a competência do mês e importe os XMLs de NF-e modelo 55 da empresa e do mesmo mês. Confira notas, itens e alertas antes de fechar. Duplicidades são bloqueadas e registradas. Competências com alertas de XML ou sem notas não podem ser fechadas. A resolução desses alertas ainda não está disponível.
 
 ## Limites desta entrega
 
@@ -48,3 +48,19 @@ O backup JSON da carteira inclui clientes, tarefas, etapas, notas, carteiras, re
 ## Atualizar uma instalação Windows existente
 
 Feche a janela do programa, faça uma cópia segura da pasta `data` e baixe o ZIP atualizado do GitHub. Extraia em uma pasta nova e copie sua pasta `data` para dentro dela, ao lado de `app.py`. Abra `Iniciar-Windows.bat` dessa nova pasta. A estrutura do banco é atualizada ao iniciar, preservando os dados existentes. Depois importe seu HTML ou backup na agenda, se ainda não tiver feito isso. Não envie o banco nem o backup para um repositório público.
+
+## Primeiro fluxo com o Domínio: XML em lote e conferência SPED
+
+O sistema recebe arquivos que o contador já possui ou exporta do Domínio. Não se conecta diretamente ao Domínio, à SEFAZ, a e-mails ou ERPs. Não usa certificado nesta etapa e não altera ou transmite arquivos fiscais.
+
+1. Abra a competência de uma empresa em **Competências**.
+2. Em **Importação XML**, selecione até 200 XMLs por lote, cada um de até 5 MB. O seletor de arquivos do Windows permite selecionar vários arquivos. Cada nota é salva em uma transação própria. Notas válidas permanecem importadas mesmo se outro arquivo falhar; a tela mostra sucesso, duplicidade ou erro por arquivo. O resultado detalhado do lote fica na sessão da página; as notas e os registros de importação bem-sucedida permanecem no banco.
+3. Em **Conferência SPED**, selecione a mesma competência e o TXT da **EFD ICMS/IPI (SPED Fiscal)** exportado pelo Domínio. Não é a EFD Contribuições. O arquivo deve conter o CNPJ correto e cobrir o mês completo; são aceitos UTF-8 e Windows-1252, até 20 MB.
+4. Confira o relatório com o contador. Ele aponta XML sem C100 regular correspondente, C100 sem XML na base, chave repetida, operação divergente e diferenças de total, ICMS, IPI, PIS e COFINS. Campos vazios no SPED não são tratados como zero. Diferenças não representam automaticamente erro fiscal: valores escriturados podem refletir ajustes ou restrições ao crédito.
+5. Use **Baixar relatório para Excel (CSV)** para compartilhar a conferência. O relatório inclui empresa, período, arquivo, data da conferência, tamanho das bases e escopo. Chaves longas são prefixadas como texto para preservar os dígitos no Excel. Os arquivos e relatórios são preservados no banco; a tela oferece os últimos 100 relatórios para download.
+
+A conferência inicial compara somente NF-e modelo 55 nos registros C100 com situações 00 e 01. Documentos cancelados, denegados, complementares, de regime especial e outros modelos são informados como fora do escopo. Não valida o arquivo no PVA nem compara itens, CFOP/CST, ST, DIFAL, direito ao crédito, eventos, CT-e, NFS-e, regras estaduais, IBS/CBS/IS ou obrigações contábeis. A ausência de diferenças não certifica regularidade fiscal. O SPED inteiro é preservado, mas somente os campos descritos são interpretados.
+
+A importação atual de XML exige emissão dentro da competência. Entradas de emissão anterior ainda precisam de um fluxo próprio; por isso, um XML ausente na base não prova erro ou ausência no Domínio. Se importar novos XMLs depois de conferir, o relatório é marcado como desatualizado. Clique em **Conferir novamente com o SPED mais recente** para gerar outro relatório, preservando o anterior.
+
+Os relatórios de SPED são informativos: não corrigem a escrituração, não removem alertas e não determinam sozinhos o fechamento fiscal. A validação da aplicabilidade das regras e o primeiro teste com arquivos reais do Domínio devem ser feitos pelo contador antes de uso operacional.
