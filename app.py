@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import agenda
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
@@ -24,6 +25,7 @@ def connect():
     CREATE TABLE IF NOT EXISTS findings(id INTEGER PRIMARY KEY, period_id INTEGER REFERENCES periods(id), message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, created TEXT NOT NULL, action TEXT NOT NULL);
     ''')
+    agenda.migrate(db)
     return db
 
 def log(db, action):
@@ -93,6 +95,8 @@ def import_xml(db, period_id, xml):
     return {'imported': True}
 
 def mutate(db, action, data):
+    if action.startswith('agenda_'):
+        return agenda.mutate(db,action,data,log)
     if action == 'wallet':
         if not data.get('name','').strip() or not data.get('responsible','').strip(): raise ValueError('Informe nome e responsável')
         if data.get('id'):
@@ -107,7 +111,7 @@ def mutate(db, action, data):
             weights = list(range(length-7,1,-1))+list(range(9,1,-1))
             digit = (sum(int(a)*b for a,b in zip(cnpj[:length],weights))*10)%11
             if int(cnpj[length]) != (0 if digit==10 else digit): raise ValueError('Dígitos verificadores do CNPJ inválidos')
-        if not data.get('name','').strip() or data.get('regime') not in ('Normal','Simples Nacional'): raise ValueError('Nome ou regime inválido')
+        if not data.get('name','').strip() or data.get('regime') not in ('Normal','Simples Nacional','Lucro Real','Lucro Presumido','MEI'): raise ValueError('Nome ou regime inválido')
         rate = Decimal(amount(data.get('icms_rate','18')))
         if rate>100: raise ValueError('Alíquota deve estar entre 0 e 100')
         db.execute('INSERT INTO companies(cnpj,name,regime,cnae,ie,city,uf,wallet_id,icms_rate) VALUES (?,?,?,?,?,?,?,?,?)',(cnpj,data['name'],data['regime'],data.get('cnae'),data.get('ie'),data.get('city'),data.get('uf'),data.get('wallet_id') or None,str(rate)))
@@ -136,6 +140,7 @@ def state(db):
         credit = sum((Decimal(n['icms']) for n in notes if n['direction']=='Entrada'),Decimal(0))
         settlements.append({'period_id':p['id'],'debit':str(debit),'potential_credit':str(credit),'balance':str(max(debit-credit,Decimal(0)))})
     result['settlements']=settlements
+    result.update(agenda.state(db))
     return result
 
 class Handler(BaseHTTPRequestHandler):
@@ -149,9 +154,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path == '/api/state':
+        if self.path == '/api/agenda-backup':
+            with connect() as db: self.respond(200,agenda.backup(db))
+        elif self.path == '/api/state':
             with connect() as db: self.respond(200,state(db))
-        elif self.path in ('/','/style.css','/app.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
