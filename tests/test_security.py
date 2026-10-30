@@ -66,6 +66,13 @@ class LocalAccess(unittest.TestCase):
         self.assertTrue(demo.authenticated(None))
         with self.assertRaises(ValueError):demo.setup(PASSWORD,PASSWORD)
         self.assertFalse(demo.path.exists())
+    def test_current_password_guesses_are_rate_limited_during_change(self):
+        self.setup()
+        for i in range(5):
+            with self.assertRaises(ValueError):self.access.change('errada',NEW_PASSWORD,NEW_PASSWORD)
+        with self.assertRaisesRegex(ValueError,'Muitas tentativas'):self.access.change(PASSWORD,NEW_PASSWORD,NEW_PASSWORD)
+        self.now=61;cookie=self.access.change(PASSWORD,NEW_PASSWORD,NEW_PASSWORD)
+        self.assertTrue(self.access.authenticated(cookie))
     def test_host_origin_and_fetch_site_policy(self):
         self.assertTrue(valid_request('127.0.0.1:8000',8000))
         self.assertTrue(valid_request('localhost:8000',8000,'http://localhost:8000','same-origin'))

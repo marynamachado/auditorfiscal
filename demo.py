@@ -43,7 +43,7 @@ def seed(db):
 
 def reset(db):
     require_demo(db)
-    for table in ('demo_runs','sped_audits','sped_files','items','invoices','findings','agenda_tasks','agenda_notes','agenda_closures','agenda_checkins','agenda_sources','carteira_document','periods','companies','wallets','history'):
+    for table in ('demo_runs','fiscal_closures','fiscal_reviews','fiscal_finding_reviews','fiscal_cases','fiscal_entries','fiscal_rules','fiscal_events','sped_audits','sped_files','items','invoices','findings','agenda_tasks','agenda_notes','agenda_closures','agenda_checkins','agenda_sources','carteira_document','periods','companies','wallets','history'):
         db.execute('DELETE FROM '+table)
     populate(db)
     return {'ok':True}
@@ -83,6 +83,7 @@ if __name__=='__main__':
     app.DB=DEMO_DB
     app.DEMO_MODE=True
     print('Preparando o banco separado de demonstração...',flush=True)
+    app.recovery.prepare_migration_backup(app.DB)
     with app.connect() as db:seed(db)
     print('MODO DEMONSTRAÇÃO: banco separado dos clientes reais. Sem validade fiscal.',flush=True)
     app.run(port=8001,open_browser='--open-browser' in sys.argv)

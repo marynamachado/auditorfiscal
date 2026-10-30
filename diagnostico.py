@@ -1,5 +1,6 @@
 """Diagnóstico local e somente leitura, sem imprimir dados dos clientes."""
 import json
+from contextlib import closing
 import socket
 import sqlite3
 import sys
@@ -16,7 +17,7 @@ def collect(port=8001, emit=None):
         lines.append(message)
         if emit:emit(message)
     if sys.version_info<(3,9):log('ATENÇÃO: Python antigo. Instale Python 3.12 ou mais recente.')
-    required=('app.py','demo.py','demo_data.py','agenda.py','carteira.py','sped.py','static/index.html','static/app.js','static/demo.js','static/request.js','static/style.css','security.py','static/security.js','static/inspiration.js','static/carteira-theme.css')
+    required=('app.py','demo.py','demo_data.py','agenda.py','carteira.py','sped.py','static/index.html','static/app.js','static/demo.js','static/request.js','static/style.css','security.py','static/security.js','static/inspiration.js','static/carteira-theme.css','fiscal.py','recovery.py','static/fiscal.js','validar_ambiente.py')
     log('Conferindo os arquivos...')
     missing=[name for name in required if not (ROOT/name).is_file()]
     log('Arquivos do programa: '+('OK' if not missing else 'FALTANDO: '+', '.join(missing)))
@@ -49,7 +50,7 @@ def collect(port=8001, emit=None):
     if not database.is_file():log('Banco de demonstração: ainda não foi criado. Abra o iniciador.')
     else:
         try:
-            with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True,timeout=3) as db:
+            with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True,timeout=3)) as db:
                 row=db.execute('SELECT version FROM demo_meta WHERE id=1').fetchone()
                 log('Banco de demonstração: '+('identificado e legível.' if row and row[0]=='auditor-fiscal-demo-v1' else 'identificação ausente ou incompatível.'))
         except sqlite3.Error as error:

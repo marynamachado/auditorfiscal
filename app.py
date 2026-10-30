@@ -11,6 +11,8 @@ import carteira
 import sped
 import demo_data
 import security
+import fiscal
+import recovery
 import threading
 import secrets
 
@@ -19,24 +21,34 @@ DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
 DEMO_MODE = False
 ACCESS_LOCK=threading.Lock()
 
+class ManagedConnection(sqlite3.Connection):
+    def __exit__(self,*args):
+        try:return super().__exit__(*args)
+        finally:self.close()
+
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB, timeout=3)
-    db.row_factory = sqlite3.Row
-    db.execute('PRAGMA foreign_keys=ON')
-    db.executescript('''
-    CREATE TABLE IF NOT EXISTS wallets(id INTEGER PRIMARY KEY, name TEXT NOT NULL, responsible TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS companies(id INTEGER PRIMARY KEY, cnpj TEXT UNIQUE NOT NULL, name TEXT NOT NULL, regime TEXT NOT NULL, cnae TEXT, ie TEXT, city TEXT, uf TEXT, wallet_id INTEGER REFERENCES wallets(id), icms_rate TEXT NOT NULL DEFAULT '18');
-    CREATE TABLE IF NOT EXISTS periods(id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), month TEXT NOT NULL, closed INTEGER NOT NULL DEFAULT 0, UNIQUE(company_id,month));
-    CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY, period_id INTEGER NOT NULL REFERENCES periods(id), access_key TEXT NOT NULL, number TEXT, issued TEXT, direction TEXT NOT NULL, total TEXT NOT NULL, icms TEXT NOT NULL, ipi TEXT NOT NULL, pis TEXT NOT NULL, cofins TEXT NOT NULL, xml TEXT NOT NULL, UNIQUE(period_id,access_key));
-    CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), product TEXT, ncm TEXT, cfop TEXT, cst TEXT, base TEXT, icms TEXT, ipi TEXT, pis TEXT, cofins TEXT);
-    CREATE TABLE IF NOT EXISTS findings(id INTEGER PRIMARY KEY, period_id INTEGER REFERENCES periods(id), message TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, created TEXT NOT NULL, action TEXT NOT NULL);
-    ''')
-    agenda.migrate(db)
-    carteira.migrate(db)
-    sped.migrate(db)
-    return db
+    db = sqlite3.connect(DB, timeout=3, factory=ManagedConnection)
+    try:
+        db.row_factory = sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        db.executescript('''
+        CREATE TABLE IF NOT EXISTS wallets(id INTEGER PRIMARY KEY, name TEXT NOT NULL, responsible TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS companies(id INTEGER PRIMARY KEY, cnpj TEXT UNIQUE NOT NULL, name TEXT NOT NULL, regime TEXT NOT NULL, cnae TEXT, ie TEXT, city TEXT, uf TEXT, wallet_id INTEGER REFERENCES wallets(id), icms_rate TEXT NOT NULL DEFAULT '18');
+        CREATE TABLE IF NOT EXISTS periods(id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), month TEXT NOT NULL, closed INTEGER NOT NULL DEFAULT 0, UNIQUE(company_id,month));
+        CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY, period_id INTEGER NOT NULL REFERENCES periods(id), access_key TEXT NOT NULL, number TEXT, issued TEXT, direction TEXT NOT NULL, total TEXT NOT NULL, icms TEXT NOT NULL, ipi TEXT NOT NULL, pis TEXT NOT NULL, cofins TEXT NOT NULL, xml TEXT NOT NULL, UNIQUE(period_id,access_key));
+        CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), product TEXT, ncm TEXT, cfop TEXT, cst TEXT, base TEXT, icms TEXT, ipi TEXT, pis TEXT, cofins TEXT);
+        CREATE TABLE IF NOT EXISTS findings(id INTEGER PRIMARY KEY, period_id INTEGER REFERENCES periods(id), message TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, created TEXT NOT NULL, action TEXT NOT NULL);
+        ''')
+        agenda.migrate(db)
+        carteira.migrate(db)
+        sped.migrate(db)
+        fiscal.migrate(db)
+        return db
+    except Exception:
+        db.close()
+        raise
 
 def log(db, action):
     db.execute('INSERT INTO history(created,action) VALUES (?,?)', (datetime.now().isoformat(timespec='seconds'), action))
@@ -54,6 +66,7 @@ def amount(value):
     return str(n)
 
 def import_xml(db, period_id, xml):
+    db.execute('UPDATE periods SET closed=closed WHERE id=?',(period_id,))
     p = db.execute('SELECT p.*,c.cnpj FROM periods p JOIN companies c ON c.id=p.company_id WHERE p.id=?', (period_id,)).fetchone()
     if not p or p['closed']:
         raise ValueError('Selecione uma competência aberta')
@@ -78,8 +91,9 @@ def import_xml(db, period_id, xml):
     if issued[:7] != p['month']:
         raise ValueError('Data da NF-e fora da competência selecionada')
     direction = 'Saída' if issuer == p['cnpj'] else 'Entrada'
-    if db.execute('SELECT 1 FROM invoices WHERE period_id=? AND access_key=?', (period_id,key)).fetchone():
-        db.execute('INSERT INTO findings(period_id,message) VALUES (?,?)', (period_id, 'Importação duplicada bloqueada: '+key))
+    existing=db.execute('SELECT id FROM invoices WHERE period_id=? AND access_key=?', (period_id,key)).fetchone()
+    if existing:
+        db.execute('INSERT INTO findings(period_id,message,code,invoice_id) VALUES (?,?,?,?)', (period_id, 'Importação duplicada bloqueada: '+key,'duplicate_attempt',existing['id']))
         log(db, 'Duplicidade bloqueada: '+key)
         return {'duplicate': True}
     totals = inf.find('total/ICMSTot')
@@ -103,11 +117,12 @@ def import_xml(db, period_id, xml):
         if not cst: issues.append('CST/CSOSN ausente')
         if issuer == p['cnpj'] and cfop[:1] not in ('5','6','7'): issues.append('CFOP incompatível com saída do emitente')
         for issue in issues:
-            db.execute('INSERT INTO findings(period_id,message) VALUES (?,?)', (period_id, f'NF {inf.findtext("ide/nNF")}: {issue}'))
+            db.execute('INSERT INTO findings(period_id,message,code,invoice_id) VALUES (?,?,?,?)', (period_id, f'NF {inf.findtext("ide/nNF")}: {issue}','structural',cur.lastrowid))
     log(db, f'NF-e {key} importada: {direction}')
     return {'imported': True}
 
 def mutate(db, action, data):
+    if action.startswith('fiscal_'):return fiscal.mutate(db,action,data,log)
     if action in ('demo_reset','demo_load'):
         import demo
         return demo.reset(db) if action=='demo_reset' else demo.load_scenario(db,data['scenario'])
@@ -142,10 +157,13 @@ def mutate(db, action, data):
         if datetime.strptime(month,'%Y-%m').strftime('%Y-%m') != month: raise ValueError('Competência inválida')
         db.execute('INSERT INTO periods(company_id,month) VALUES (?,?)',(data['company_id'],month))
     elif action == 'close':
+        db.execute('UPDATE periods SET closed=closed WHERE id=?',(data['id'],))
         p = db.execute('SELECT * FROM periods WHERE id=?',(data['id'],)).fetchone()
         if not p or p['closed']: raise ValueError('Competência já fechada ou inexistente')
-        if db.execute('SELECT 1 FROM findings WHERE period_id=?',(data['id'],)).fetchone(): raise ValueError('Existem alertas de auditoria; fechamento bloqueado')
+        if fiscal.pending_findings(db,data['id']): raise ValueError('Existem alertas de auditoria; fechamento bloqueado')
         if not db.execute('SELECT 1 FROM invoices WHERE period_id=?',(data['id'],)).fetchone(): raise ValueError('Importe e confira as notas antes de fechar')
+        report=fiscal.close_check(db,data['id'])
+        fiscal.freeze(db,data['id'],report)
         db.execute('UPDATE periods SET closed=1 WHERE id=?',(data['id'],))
     elif action == 'import': return import_xml(db,int(data['period_id']),data['xml'])
     else: raise ValueError('Operação desconhecida')
@@ -155,15 +173,20 @@ def mutate(db, action, data):
 def state(db):
     result = {name:[dict(r) for r in db.execute('SELECT * FROM '+name)] for name in ('wallets','companies','periods','items','findings','history')}
     result['invoices'] = [dict(r) for r in db.execute('SELECT id,period_id,access_key,number,issued,direction,total,icms,ipi,pis,cofins FROM invoices')]
+    for note in result['invoices']:
+        events=[r['status'] for r in db.execute('SELECT status FROM fiscal_events WHERE invoice_id=?',(note['id'],))]
+        note['control_status']='Cancelamento informado — conferido' if 'confirmado' in events else 'Evento pendente de conferência' if 'pendente' in events else 'Importada'
     settlements = []
     for p in result['periods']:
-        notes = [n for n in result['invoices'] if n['period_id']==p['id']]
+        excluded=fiscal.cancelled(db,p['id'])
+        notes = [n for n in result['invoices'] if n['period_id']==p['id'] and n['id'] not in excluded]
         debit = sum((Decimal(n['icms']) for n in notes if n['direction']=='Saída'),Decimal(0))
         credit = sum((Decimal(n['icms']) for n in notes if n['direction']=='Entrada'),Decimal(0))
         settlements.append({'period_id':p['id'],'debit':str(debit),'potential_credit':str(credit),'balance':str(max(debit-credit,Decimal(0)))})
     result['settlements']=settlements
     result.update(agenda.state(db))
     result.update(sped.state(db))
+    result.update(fiscal.state(db))
     import demo
     result['demo']=demo.info(db)
     return result
@@ -256,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
                 print('Erro ao ler o banco: '+str(error),flush=True)
                 return self.respond(503,{'error':'O banco de dados não pôde ser lido. Feche outras janelas do programa e execute Diagnosticar-Demonstracao-Windows.bat. Nenhum cadastro foi apagado.'})
             self.respond(200,result)
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js','/security.js','/inspiration.js','/carteira-theme.css'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js','/security.js','/inspiration.js','/carteira-theme.css','/fiscal.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
@@ -289,6 +312,8 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(400,{'error':str(e)})
 
 def run(port=8000,open_browser=False):
+    saved=recovery.prepare_migration_backup(DB)
+    if saved:print('Cópia anterior à atualização criada em data/backups: '+saved.name,flush=True)
     with connect(): pass
     server = ThreadingHTTPServer(('127.0.0.1',port),Handler)
     url=f'http://127.0.0.1:{port}'

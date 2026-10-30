@@ -89,14 +89,17 @@ class Access:
             return self.new_session()
     def login(self,password):
         with self.lock:
-            now=self.clock();self.failures=[t for t in self.failures if now-t<60]
-            if len(self.failures)>=5:raise ValueError('Muitas tentativas. Aguarde um minuto antes de tentar novamente.')
-            if not self.verify(password):
-                self.failures.append(now);raise ValueError('Senha incorreta.')
-            self.failures.clear();return self.new_session()
+            self.checked_password(password)
+            return self.new_session()
+    def checked_password(self,password):
+        now=self.clock();self.failures=[t for t in self.failures if now-t<60]
+        if len(self.failures)>=5:raise ValueError('Muitas tentativas. Aguarde um minuto antes de tentar novamente.')
+        if not self.verify(password):
+            self.failures.append(now);raise ValueError('Senha incorreta.')
+        self.failures.clear()
     def change(self,current,password,confirmation):
         with self.lock:
-            if not self.verify(current):raise ValueError('A senha atual está incorreta.')
+            self.checked_password(current)
             if password!=confirmation:raise ValueError('As novas senhas não coincidem.')
             self.write_password(password)
             return self.new_session()

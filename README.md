@@ -74,6 +74,16 @@ Pedidos com Host inesperado ou origem de outro site são recusados, e as APIs de
 
 Execute `python3 -m unittest discover -s tests -v`. Os testes usam banco temporário e não alteram seus dados.
 
+### Piloto assistido em Goiás
+
+Abra **Apuração assistida GO** para cadastrar um caso por empresa e competência, informar os resultados de referência de um mês fechado no Domínio e registrar parâmetros com responsável e fundamentação. O piloto calcula lançamentos explícitos de ICMS, PIS, COFINS, IPI e ISS, com arredondamento escolhido, créditos informados, ajustes, estornos e saldo credor. Não determina automaticamente o enquadramento, a alíquota legal ou o direito ao crédito. A vigência das regras é mensal. O DAS do Simples/MEI ainda não é calculado; seu valor pode ser guardado somente como referência pendente.
+
+Eventos de cancelamento importados exigem conferência externa; o sistema não verifica assinatura nem consulta autorização na SEFAZ. Divergências e pendências bloqueiam a conferência do caso. Alterações relevantes invalidam a conferência anterior; o fechamento preserva uma memória do caso. O nome do conferente é uma declaração, sem assinatura digital ou autenticação individual. Competências sem caso cadastrado mantêm apenas o fechamento operacional antigo, sem aprovação profissional.
+
+Consulte o [plano de validação em Goiás](docs/PLANO_VALIDACAO_GO.md), o [roteiro Windows](docs/VALIDACAO_WINDOWS.md) e a [preparação para revisão independente de segurança](docs/REVISAO_SEGURANCA.md). Ainda faltam a escolha de empresa/mês, a conferência real pelo contador, a execução nativa no Windows e uma revisão externa de segurança.
+
+No Windows, execute **Validar-Windows.bat**. Ele testa dados fictícios, servidor, backup, recuperação e atualização em pastas temporárias e grava `data/validacao-tecnica.json`. Uma execução em Linux não valida o Windows nem aprova o uso fiscal. Antes da migração deste piloto, o iniciador salva uma cópia consistente do banco existente em `data/backups`; essa cópia também não é criptografada e precisa da mesma proteção dos dados originais.
+
 ## Carteira original integrada
 
 Abra **Agenda e Clientes** no menu. A própria interface da Carteira do Danillo agora aparece dentro do sistema: cartões coloridos por cliente, carteiras, pesquisa, competência, calendário, calculadora, tarefas e checklists, notas coloridas, honorários e contatos, repetições mensais, conclusão/reabertura de trabalho por empresa, resumo de conclusões, check-in diário, backup e restauração.

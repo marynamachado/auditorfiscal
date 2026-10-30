@@ -60,16 +60,21 @@ def parse(content, cnpj, month):
     return {'documents':docs,'excluded':excluded,'other_documents':other,'month':month,'cnpj':cnpj,'lines':len(lines),'layout':header[1]}
 
 def open_period(db, ident):
+    db.execute('UPDATE periods SET closed=closed WHERE id=?',(ident,))
     period=db.execute('SELECT p.*,c.cnpj,c.name FROM periods p JOIN companies c ON c.id=p.company_id WHERE p.id=?',(ident,)).fetchone()
     if not period or period['closed']:raise ValueError('Selecione uma competência aberta')
     return period
 
 def compare(db, sped_id, log):
+    import fiscal
     source=db.execute('SELECT * FROM sped_files WHERE id=?',(sped_id,)).fetchone()
     if not source:raise ValueError('SPED não encontrado')
     p=open_period(db,source['period_id'])
     parsed=json.loads(source['parsed'])
-    xmls={r['access_key']:dict(r) for r in db.execute('SELECT * FROM invoices WHERE period_id=?',(p['id'],))}
+    raw_xmls=[dict(r) for r in db.execute('SELECT * FROM invoices WHERE period_id=?',(p['id'],))]
+    cancelled_ids=fiscal.cancelled(db,p['id'])
+    cancelled_keys={n['access_key']:n for n in raw_xmls if n['id'] in cancelled_ids}
+    xmls={n['access_key']:n for n in raw_xmls if n['id'] not in cancelled_ids}
     groups=defaultdict(list)
     for doc in parsed['documents']:groups[doc['key']].append(doc)
     findings=[]
@@ -86,6 +91,9 @@ def compare(db, sped_id, log):
         if len(docs)>1:finding('Chave repetida no SPED',key,'Linhas: '+', '.join(str(d['line']) for d in docs),line=docs[0]['line'],number=docs[0]['number'])
         invoice=xmls.get(key)
         if not invoice:
+            if key in cancelled_keys:
+                finding('Cancelamento informado com C100 regular',key,'O usuário registrou cancelamento conferido, mas o SPED contém C100 regular. Confira situação e escrituração na fonte oficial.',line=docs[0]['line'],number=docs[0]['number'])
+                continue
             finding('XML ausente na base',key,'A nota consta no SPED, mas seu XML não foi importado para esta competência. Isso não prova ausência no Domínio.',line=docs[0]['line'],number=docs[0]['number'])
             continue
         for doc in docs:
@@ -97,11 +105,12 @@ def compare(db, sped_id, log):
                 elif Decimal(invoice[field])!=Decimal(doc[field]):
                     finding(label+' divergente',key,'Diferença entre valor destacado no XML e valor escriturado. Pode decorrer de crédito permitido, ajustes ou tratamento fiscal; requer revisão.',invoice[field],doc[field],doc['line'],doc['number'])
     report={'company':p['name'],'cnpj':p['cnpj'],'month':p['month'],'filename':source['filename'],'digest':source['digest'],'layout':parsed['layout'],
-        'xml_count':len(xmls),'sped_count':len(parsed['documents']),'matched_keys':sum(k in xmls for k in groups),'excluded':parsed['excluded'],'other_documents':parsed['other_documents'],'findings':findings,
-        'scope':'Conferência inicial: presença, chaves repetidas, operação, total, ICMS, IPI, PIS e COFINS de NF-e modelo 55, situações 00 e 01 do C100. Não valida PVA, itens, CFOP/CST, créditos, eventos, CT-e, serviços, reforma tributária ou transmissão.'}
+        'xml_count':len(xmls),'cancelled_xml_count':len(cancelled_keys),'event_snapshot':fiscal.event_snapshot(db,p['id']),'sped_count':len(parsed['documents']),'matched_keys':sum(k in xmls for k in groups),'excluded':parsed['excluded'],'other_documents':parsed['other_documents'],'findings':findings,
+        'scope':'Conferência inicial: presença, chaves repetidas, operação, total, ICMS, IPI, PIS e COFINS de NF-e modelo 55, situações 00 e 01 do C100. Não valida PVA, itens, CFOP/CST, créditos, autenticidade de eventos, CT-e, serviços, reforma tributária ou transmissão.'}
     if not xmls or not parsed['documents']:report['warning']='Uma das bases não contém NF-e no escopo; a comparação está incompleta.'
+    if db.execute("SELECT 1 FROM fiscal_events WHERE period_id=? AND status='pendente'",(p['id'],)).fetchone():report['warning']=report.get('warning','')+' Há eventos de cancelamento ainda não conferidos.'
     created=datetime.now(timezone.utc).isoformat(timespec='seconds')
-    audit_id=db.execute('INSERT INTO sped_audits(sped_id,period_id,created,invoice_count,report) VALUES (?,?,?,?,?)',(sped_id,p['id'],created,len(xmls),json.dumps(report,ensure_ascii=False))).lastrowid
+    audit_id=db.execute('INSERT INTO sped_audits(sped_id,period_id,created,invoice_count,report) VALUES (?,?,?,?,?)',(sped_id,p['id'],created,len(raw_xmls),json.dumps(report,ensure_ascii=False))).lastrowid
     log(db,f'Conferência SPED {source["filename"]}: {len(findings)} ocorrências, relatório {audit_id}')
     return {'ok':True,'audit_id':audit_id,'findings':len(findings)}
 
@@ -121,13 +130,14 @@ def import_file(db, data, log):
     return result
 
 def state(db):
+    import fiscal
     files=[dict(r) for r in db.execute('SELECT id,period_id,filename,digest,created FROM sped_files ORDER BY id DESC')]
     audits=[]
     for r in db.execute('SELECT * FROM sped_audits WHERE id IN (SELECT MAX(id) FROM sped_audits GROUP BY period_id) ORDER BY id DESC'):
         entry=dict(r);entry['report']=json.loads(entry['report'])
         count=db.execute('SELECT COUNT(*) FROM invoices WHERE period_id=?',(r['period_id'],)).fetchone()[0]
         latest=db.execute('SELECT MAX(id) FROM sped_files WHERE period_id=?',(r['period_id'],)).fetchone()[0]
-        entry['stale']=count!=r['invoice_count'] or latest!=r['sped_id']
+        entry['stale']=count!=r['invoice_count'] or latest!=r['sped_id'] or entry['report'].get('event_snapshot')!=fiscal.event_snapshot(db,r['period_id'])
         audits.append(entry)
     history=[dict(r) for r in db.execute('SELECT a.id,a.period_id,a.created,f.filename FROM sped_audits a JOIN sped_files f ON f.id=a.sped_id ORDER BY a.id DESC LIMIT 100')]
     return {'sped_files':files,'sped_audits':audits,'sped_audit_history':history}
@@ -139,7 +149,7 @@ def report_csv(report, created):
     def safe(value):
         value=str(value if value is not None else '')
         return "'"+value if value.lstrip().startswith(('=','+','-','@')) or value.startswith(('\t','\r','\n')) or (value.isdigit() and len(value)>=14) else value
-    for record in [['Empresa',report['company']],['CNPJ',report['cnpj']],['Competência',report['month']],['Arquivo',report['filename']],['Conferido em (com fuso)',created],['XMLs na base',report['xml_count']],['C100 no escopo',report['sped_count']],['Documentos de outros modelos fora do escopo',report['other_documents']],['Aviso',report.get('warning','')],['Escopo',report['scope']],[],['Ocorrência','Chave','Nota','XML','SPED','Linha','Observação']]:writer.writerow([safe(x) for x in record])
+    for record in [['Empresa',report['company']],['CNPJ',report['cnpj']],['Competência',report['month']],['Arquivo',report['filename']],['Conferido em (com fuso)',created],['XMLs ativos na base',report['xml_count']],['XMLs excluídos por cancelamento informado',report.get('cancelled_xml_count',0)],['C100 no escopo',report['sped_count']],['Documentos de outros modelos fora do escopo',report['other_documents']],['Aviso',report.get('warning','')],['Escopo',report['scope']],[],['Ocorrência','Chave','Nota','XML','SPED','Linha','Observação']]:writer.writerow([safe(x) for x in record])
     for f in report['findings']:
         values=[]
         for key in ('rule','key','number','xml','sped','line','note'):
