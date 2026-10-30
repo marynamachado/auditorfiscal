@@ -31,6 +31,12 @@ Use **Reiniciar somente os dados de demonstração** para repetir do início. Es
 
 Os documentos são sintéticos: XMLs com ambiente de homologação, sem assinatura ou protocolo; SPED simplificado que não foi validado no PVA. As alíquotas e valores são escolhidos para facilitar o teste, sem aplicação das regras legais do estado. IE, CEP e contatos são exemplificativos. Não houve consulta cadastral e nenhuma associação a empresas reais é afirmada. **Não enviar os documentos ao Domínio, ao PVA ou ao Fisco.**
 
+### Se a demonstração ficar vazia ou carregando
+
+O carregamento normal leva alguns segundos. As consultas da tela e os botões de cenário têm limite de espera de 15 segundos e mostram uma orientação caso a resposta não chegue. Uma operação pode ter sido salva mesmo se a resposta se perder; recarregue antes de repetir. Abrir o HTML diretamente também mostra a orientação para usar o iniciador.
+
+Feche apenas as janelas pretas e abas do Auditor Fiscal, extraia a versão atualizada completa para uma pasta nova e abra **Iniciar-Demonstracao-Windows.bat**. Mantenha a janela aberta. Se a página continuar vazia, dê dois cliques em **Diagnosticar-Demonstracao-Windows.bat**, na mesma pasta da instalação com problema. O diagnóstico verifica os arquivos, a porta local, as respostas do programa e a leitura do banco, sem alterar cadastros. Ele salva `data/diagnostico-demonstracao.txt`; envie esse arquivo ou uma foto da janela. Não lista clientes nem credenciais.
+
 ## Primeiro uso
 
 Cadastre uma carteira e seu responsável, depois uma empresa com CNPJ válido. Abra a competência do mês e importe os XMLs de NF-e modelo 55 da empresa e do mesmo mês. Confira notas, itens e alertas antes de fechar. Duplicidades são bloqueadas e registradas. Competências com alertas de XML ou sem notas não podem ser fechadas. A resolução desses alertas ainda não está disponível.

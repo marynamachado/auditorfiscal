@@ -17,7 +17,7 @@ DEMO_MODE = False
 
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB)
+    db = sqlite3.connect(DB, timeout=3)
     db.row_factory = sqlite3.Row
     db.execute('PRAGMA foreign_keys=ON')
     db.executescript('''
@@ -171,12 +171,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type',kind)
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Length',str(len(raw)))
+        self.send_header('Cache-Control','no-store')
         for name,value in (headers or {}).items(): self.send_header(name,value)
         self.end_headers()
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path == '/api/demo-files':
+        if self.path == '/api/health':
+            return self.respond(200,{'service':'auditor-fiscal','demo':DEMO_MODE,'version':'startup-diagnostics-1'})
+        elif self.path == '/api/demo-files':
             import io
             from zipfile import ZipFile, ZIP_DEFLATED
             output=io.BytesIO()
@@ -196,8 +199,14 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == '/api/agenda-backup':
             with connect() as db: self.respond(200,agenda.backup(db))
         elif self.path == '/api/state':
-            with connect() as db: self.respond(200,state(db))
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js'):
+            print('Lendo os dados para abrir a tela...',flush=True)
+            try:
+                with connect() as db: result=state(db)
+            except sqlite3.Error as error:
+                print('Erro ao ler o banco: '+str(error),flush=True)
+                return self.respond(503,{'error':'O banco de dados não pôde ser lido. Feche outras janelas do programa e execute Diagnosticar-Demonstracao-Windows.bat. Nenhum cadastro foi apagado.'})
+            self.respond(200,result)
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')

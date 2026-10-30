@@ -9,9 +9,18 @@ function select(name,label,options){return `<label>${label}<select name="${name}
 function form(action,body){return `<form data-action="${action}">${body}<button>Salvar</button></form>`}
 function panel(title,body){return `<div class="panel"><h2>${title}</h2>${body}</div>`}
 function table(headers,rows){return rows.length?`<div class="scroll"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhum registro ainda. Comece pelo cadastro de carteiras e empresas.</div>'}
-async function load(){const r=await fetch('/api/state');if(!r.ok)throw Error('Não foi possível carregar os dados');state=await r.json();if(firstLoad&&state.demo.enabled)page='Como testar';firstLoad=false;render()}
-async function send(action,data){const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error);if(action==='agenda_task')agendaEdit='';await load();$('#message').className='success';$('#message').textContent=action==='sped_import'?'SPED recebido e conferência salva. Confira as ocorrências e o escopo do relatório.':action==='sped_compare'?'Conferência atualizada com os XMLs disponíveis.':result.duplicate?'Nota duplicada bloqueada e registrada na auditoria.':'Operação salva no banco de dados.';return result}
-function failure(e){$('#message').className='error';$('#message').textContent=e.message}
+async function load(){
+ const data=await fiscalRequest('/api/state');
+ if(!data||!data.demo||typeof data.demo.enabled!=='boolean'||!Array.isArray(data.companies))throw Error('Há uma versão antiga do programa em execução. Feche as janelas pretas do Auditor Fiscal, extraia a pasta atualizada completa e abra Iniciar-Demonstracao-Windows.bat novamente.');
+ state=data;if(firstLoad&&state.demo.enabled)page='Como testar';firstLoad=false;render();
+}
+async function send(action,data){
+ const result=await fiscalRequest('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+ if(action==='agenda_task')agendaEdit='';
+ try{await load()}catch(error){throw Error('A operação foi salva, mas a tela não pôde ser atualizada. Recarregue a página antes de repetir. '+error.message)}
+ $('#message').className='success';$('#message').textContent=action==='sped_import'?'SPED recebido e conferência salva. Confira as ocorrências e o escopo do relatório.':action==='sped_compare'?'Conferência atualizada com os XMLs disponíveis.':result.duplicate?'Nota duplicada bloqueada e registrada na auditoria.':'Operação salva no banco de dados.';return result;
+}
+function failure(error){if(document.getElementById('startup')){window.showStartupError(error instanceof ReferenceError||error instanceof SyntaxError?'Algum arquivo do programa está ausente ou incompatível. Extraia a pasta completa da versão atualizada e abra o iniciador novamente.':error.message);return}$('#message').className='error';$('#message').textContent=error.message}
 function render(){
  $('#title').textContent=page;$('#nav').innerHTML=pages.map(p=>`<button class="${p==page?'active':''}" data-page="${p}">${p}</button>`).join('');
  const s=state;let html='';document.body.classList.toggle('demo-mode',s.demo.enabled);$('header .badge').textContent=s.demo.enabled?'● DEMONSTRAÇÃO · Dados fictícios':'● Ambiente local';$('.notice').textContent=s.demo.enabled?'DEMONSTRAÇÃO — dados fictícios, sem validade fiscal, em banco separado dos seus clientes reais.':'Versão de validação • Apuração preliminar, sem transmissão de obrigações. Confira os resultados com um contador.';

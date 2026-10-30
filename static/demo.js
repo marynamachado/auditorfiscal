@@ -19,6 +19,6 @@ document.addEventListener('click',async e=>{
  if(!load&&!reset)return;
  const button=load||reset;
  if(reset&&!confirm('Reiniciar TODOS os dados de demonstração? As alterações de teste serão apagadas. O banco dos clientes reais não será alterado.'))return;
- button.disabled=true;
- try{await send(reset?'demo_reset':'demo_load',reset?{}:{scenario:load.dataset.demoLoad});$('#message').textContent=reset?'Demonstração reiniciada. Empresa e competências recriadas, prontas para testar.':'Cenário carregado. Consulte Escrita Fiscal, Apuração ICMS, Auditoria e Conferência SPED.'}catch(error){failure(error)}finally{button.disabled=false}
+ const originalText=button.textContent;button.disabled=true;button.textContent=reset?'Reiniciando demonstração…':'Carregando cenário…';
+ try{await send(reset?'demo_reset':'demo_load',reset?{}:{scenario:load.dataset.demoLoad});$('#message').textContent=reset?'Demonstração reiniciada. Empresa e competências recriadas, prontas para testar.':'Cenário carregado. Consulte Escrita Fiscal, Apuração ICMS, Auditoria e Conferência SPED.'}catch(error){failure(error)}finally{button.disabled=false;button.textContent=originalText}
 });

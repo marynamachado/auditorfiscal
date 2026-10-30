@@ -82,6 +82,7 @@ if __name__=='__main__':
     import sys
     app.DB=DEMO_DB
     app.DEMO_MODE=True
+    print('Preparando o banco separado de demonstração...',flush=True)
     with app.connect() as db:seed(db)
     print('MODO DEMONSTRAÇÃO: banco separado dos clientes reais. Sem validade fiscal.',flush=True)
     app.run(port=8001,open_browser='--open-browser' in sys.argv)
