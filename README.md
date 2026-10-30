@@ -8,6 +8,7 @@ Aplicação web local com Python 3.12+ e SQLite, sem dependências externas. Os 
 2. Extraia a pasta completa do projeto no computador.
 3. Dê dois cliques em `Iniciar-Windows.bat` e mantenha a janela aberta.
 4. No navegador, abra `http://127.0.0.1:8000`.
+5. No modo normal, crie sua senha no primeiro acesso. Depois, entre com essa senha. A demonstração continua sem senha e aceita somente documentos fictícios do kit.
 
 No macOS/Linux: dentro da pasta, execute `python3 app.py` e abra o mesmo endereço. Para parar, pressione Ctrl+C no terminal. Não abra apenas o arquivo HTML.
 
@@ -43,15 +44,31 @@ Cadastre uma carteira e seu responsável, depois uma empresa com CNPJ válido. A
 
 ## Limites desta entrega
 
-Implementados cadastro de empresas, criação/edição/exclusão de carteiras, competências, importação de NF-e, escrita fiscal, verificações iniciais, simulação de ICMS e histórico. A agenda permite revisar razão social, CNPJ e regime, contatos e honorários. Regras fiscais completas por UF/CFOP/CST, revisão de créditos, resolução de alertas fiscais, reabertura fiscal, autenticação e migração online permanecem pendentes. O percentual do dashboard mede competências fechadas. A alíquota cadastrada é apenas referência nesta etapa.
+Implementados cadastro de empresas, criação/edição/exclusão de carteiras, competências, importação de NF-e, escrita fiscal, verificações iniciais, simulação de ICMS, histórico, senha de acesso local e backup completo. A agenda permite revisar razão social, CNPJ e regime, contatos e honorários. Regras fiscais completas por UF/CFOP/CST, revisão de créditos, resolução de alertas fiscais, reabertura fiscal e migração online permanecem pendentes. O percentual do dashboard mede competências fechadas. A alíquota cadastrada é apenas referência nesta etapa.
 
 A simulação soma ICMS destacado de saídas e subtrai ICMS potencial de entradas. Não considera direito ao crédito, ST, DIFAL, ajustes, benefícios, saldos anteriores nem validação de assinatura/autorização da NF-e. Não use os resultados para recolher impostos ou transmitir obrigações. O fechamento registra uma trava local, não representa entrega ao Fisco.
 
-Use dados fictícios no primeiro teste. O servidor aceita conexões somente do próprio computador. Não exponha na internet: faltam autenticação, controle de acesso, HTTPS e implantação adequada. Histórico é operacional, sem garantia de imutabilidade.
+Use dados fictícios no primeiro teste. O servidor aceita conexões somente do próprio computador. A senha protege o acesso pelo programa, mas esta versão não deve ser exposta na internet: ainda faltam HTTPS, usuários e permissões por escritório, infraestrutura e revisão específicas para implantação online. Histórico é operacional, sem garantia de imutabilidade.
 
 ## Backup
 
 Feche o programa e copie toda a pasta `data` para um local seguro. Para restaurar, com o programa fechado, recoloque essa pasta. XMLs e informações fiscais estão no banco; proteja o arquivo. A futura versão online precisará de usuários, permissões, banco de servidor e backups automáticos.
+
+Em **Segurança e Backup → Baixar backup completo**, é possível baixar um ZIP consistente do SQLite, incluindo carteira, notas, XMLs e relatórios, mesmo com o programa aberto. A configuração de senha não é incluída nesse ZIP. Siga `RESTAURAR.txt` para uma restauração local com o programa fechado. O ZIP não é criptografado; guarde-o em local protegido. O backup JSON da carteira cobre somente a agenda.
+
+## Visual acolhedor e mensagens
+
+A interface e a carteira usam tons de creme, verde suave e terracota. O cartão de mensagens permite escolher frases motivacionais, versículos bíblicos curtos com referência, ambos ou ocultar as mensagens. **Outra mensagem** alterna o texto; **Mensagens** mostra/oculta o cartão. Não há rotação automática nem serviço externo de frases, fontes ou imagens. Somente essa preferência visual é guardada no localStorage; dados fiscais e senhas não são armazenados ali.
+
+## Proteção dos dados locais
+
+No primeiro uso do **modo normal**, o responsável cria uma senha de 12 a 128 caracteres diretamente no computador. Não há senha padrão, envio de senha pelo chat ou recuperação por e-mail. Guarde a senha em um gerenciador seguro. A configuração fica junto ao banco, em arquivo `.access.json`, com sal aleatório e derivação PBKDF2-SHA256 de 600 mil iterações, sem a senha em texto. Preserve toda a pasta `data` ao atualizar. Recuperação de uma senha esquecida exige um procedimento local autorizado e backup; não existe atalho de recuperação pela interface.
+
+As sessões ficam na memória do servidor, usam cookies HttpOnly/SameSite=Strict específicos da porta, expiram após 30 minutos sem atividade ou no máximo 8 horas e são encerradas quando o programa fecha. **Bloquear acesso** limpa a tela e encerra a sessão; salve o que estiver editando antes de bloquear. O bloqueio por inatividade também remove os dados da tela, podendo descartar alterações ainda não salvas. A troca de senha encerra as outras sessões. Cinco tentativas incorretas de login geram uma espera de um minuto.
+
+Pedidos com Host inesperado ou origem de outro site são recusados, e as APIs de dados e de exportação exigem sessão no modo normal. O navegador recebe políticas para impedir scripts e conexões externos, incorporação por outros sites e acesso à câmera, microfone e localização. A demonstração permanece sem senha para permitir o teste; não use dados reais nesse modo.
+
+**Limite importante:** senha de aplicativo não é criptografia do SQLite. Quem controla os arquivos do computador pode ler ou modificar o banco e a configuração de acesso. Os backups também não são criptografados. Use contas individuais do Windows, bloqueio de tela, permissões da pasta, atualizações e Criptografia do dispositivo/BitLocker quando disponíveis; proteja também a chave de recuperação e as cópias externas. Não compartilhe o banco ou backups por links abertos. Nenhuma dessas medidas garante risco zero nem substitui uma revisão de segurança antes de colocar o sistema online.
 
 ## Validação
 

@@ -8,6 +8,7 @@ window.fiscalRequest=async function(url,options={}){
   const response=await fetch(url,{...settings,cache:'no-store',signal:controller.signal});
   let data;
   try{data=await response.json()}catch(error){if(error.name==='AbortError')throw error;throw Error((writing?'A operação pode ter sido salva, mas não foi possível confirmá-la. Recarregue a página antes de repetir. ':'')+'O programa respondeu com uma página incompatível. Feche as janelas antigas do Auditor Fiscal e abra novamente o iniciador da pasta atualizada.')}
+  if(response.status===401)window.dispatchEvent(new Event('fiscal-session-expired'));
   if(!response.ok)throw Error(data.error||'O programa não conseguiu concluir esta operação.');
   return data;
  }catch(error){

@@ -4,7 +4,7 @@ function save(){try{
   ensurePortfolios(state);validateState(state);
   const request=new XMLHttpRequest();request.open('POST','/api/carteira',false);request.setRequestHeader('Content-Type','application/json');
   request.send(JSON.stringify({revision:serverRevision,state}));
-  const result=JSON.parse(request.responseText);if(request.status!==200)throw Error(result.error||'Falha ao salvar');
+  const result=JSON.parse(request.responseText);if(request.status===401)window.parent.postMessage({type:'fiscal-session-expired'},location.origin);if(request.status!==200)throw Error(result.error||'Falha ao salvar');
   serverRevision=result.revision;lastSavedJSON=JSON.stringify(state);$('saveStatus').textContent='● Salvo no banco de dados';$('saveStatus').classList.remove('error');return true;
 }catch(e){if(lastSavedJSON)state=JSON.parse(lastSavedJSON);$('saveStatus').textContent='⚠ Alteração não salva';$('saveStatus').classList.add('error');alert('Não foi possível salvar. '+e.message);return false}}
 function company(id){return state.companies.find(c=>c.id===id)}function groupOf(c){return c.portfolioId||''}
@@ -279,7 +279,7 @@ $('summaryReset').onclick=()=>{$('summaryMonth').value=today().slice(0,7);$('sum
 $('summaryOpenClient').onclick=()=>{const id=$('summaryClient').value;if(!company(id))return;$('referenceMonth').value=$('summaryMonth').value;$('referenceMonth').dispatchEvent(new Event('change'));openDetail(id)};
 
 async function init(){try{
-  const response=await fetch('/api/carteira',{cache:'no-store'});if(!response.ok)throw Error('Não foi possível acessar o banco');
+  const response=await fetch('/api/carteira',{cache:'no-store'});if(response.status===401){window.parent.postMessage({type:'fiscal-session-expired'},location.origin);return;}if(!response.ok)throw Error('Não foi possível acessar o banco');
   const result=await response.json();serverRevision=result.revision;state=validateState(result.state);lastSavedJSON=JSON.stringify(state);
   if(ensurePortfolios(state)|makeFuture()){if(!save())return;}
   $('saveStatus').textContent='● Salvo no banco de dados';selectedDay=today();
@@ -291,3 +291,5 @@ $('importHtml').onchange=async e=>{const file=e.target.files[0];if(!file)return;
  const result=await response.json();if(!response.ok)throw Error(result.error);await init();showToast(result.clients_added+' clientes adicionados.');
 }catch(err){alert(err.message)}finally{e.target.value=''}};
 init();
+
+for(const name of ['pointerdown','keydown'])document.addEventListener(name,()=>window.parent.postMessage({type:'fiscal-activity'},location.origin),{passive:true});

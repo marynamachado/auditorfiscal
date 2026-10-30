@@ -10,10 +10,14 @@ import agenda
 import carteira
 import sped
 import demo_data
+import security
+import threading
+import secrets
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
 DEMO_MODE = False
+ACCESS_LOCK=threading.Lock()
 
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
@@ -165,20 +169,66 @@ def state(db):
     return result
 
 class Handler(BaseHTTPRequestHandler):
+    def access(self):
+        with ACCESS_LOCK:
+            if not hasattr(self.server,'access_control'):
+                self.server.access_control=security.Access(DB.with_suffix('.access.json'),self.server.server_port,DEMO_MODE)
+        return self.server.access_control
+
+    def guard(self,writing=False):
+        if not security.valid_request(self.headers.get('Host',''),self.server.server_port,self.headers.get('Origin'),self.headers.get('Sec-Fetch-Site')):
+            self.respond(403,{'error':'Acesso permitido somente pelo endereço local do programa.'});return False
+        if writing and self.headers.get('Content-Type','').split(';')[0].strip()!='application/json':
+            self.respond(415,{'error':'Formato de requisição não permitido.'});return False
+        public={'/api/health','/api/session','/api/login','/api/setup','/api/logout','/api/demo-files'}
+        if self.path.startswith('/api/') and self.path not in public and not self.access().authenticated(self.headers.get('Cookie')):
+            self.respond(401,{'error':'Entre com sua senha para acessar os dados.','authentication_required':True});return False
+        return True
+
     def respond(self, code, body, kind='application/json; charset=utf-8', headers=None):
         raw = body if isinstance(body,bytes) else json.dumps(body,ensure_ascii=False).encode()
+        nonce=secrets.token_urlsafe(18)
+        if kind.startswith('text/html'):raw=raw.replace(b'<script>',('<script nonce="'+nonce+'">').encode())
         self.send_response(code)
         self.send_header('Content-Type',kind)
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Length',str(len(raw)))
         self.send_header('Cache-Control','no-store')
+        self.send_header('Referrer-Policy','no-referrer')
+        self.send_header('X-Frame-Options','SAMEORIGIN')
+        self.send_header('Cross-Origin-Resource-Policy','same-origin')
+        self.send_header('Cross-Origin-Opener-Policy','same-origin')
+        self.send_header('Permissions-Policy','camera=(), microphone=(), geolocation=()')
+        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'self'")
         for name,value in (headers or {}).items(): self.send_header(name,value)
         self.end_headers()
         self.wfile.write(raw)
 
     def do_GET(self):
+        if not self.guard():return
+        if self.path == '/api/session':
+            try:return self.respond(200,self.access().status(self.headers.get('Cookie')))
+            except ValueError as error:return self.respond(503,{'error':str(error)})
+        if self.path == '/api/backup':
+            import io
+            import tempfile
+            import time
+            from contextlib import closing
+            from zipfile import ZipFile, ZIP_DEFLATED
+            with tempfile.TemporaryDirectory() as folder:
+                target=Path(folder)/DB.name;started=time.monotonic()
+                def progress(*args):
+                    if time.monotonic()-started>10:raise ValueError('O banco está ocupado. Tente o backup novamente em alguns instantes.')
+                try:
+                    with closing(sqlite3.connect(DB,timeout=3)) as source,closing(sqlite3.connect(target)) as destination:source.backup(destination,pages=256,progress=progress,sleep=.05)
+                    output=io.BytesIO()
+                    with ZipFile(output,'w',ZIP_DEFLATED) as archive:
+                        archive.write(target,DB.name)
+                        archive.writestr('RESTAURAR.txt','Backup completo do banco. Arquivo NAO criptografado: proteja esta copia.\nCom o programa fechado, guarde uma copia do banco atual e recoloque o SQLite na pasta data da mesma modalidade (normal/demonstracao).\nA senha de acesso nao esta neste ZIP. Nao publique o banco no GitHub ou na internet.\n')
+                except (ValueError,sqlite3.Error) as error:return self.respond(503,{'error':str(error)})
+            return self.respond(200,output.getvalue(),'application/zip',{'Content-Disposition':'attachment; filename="Backup-Auditor-Fiscal.zip"'})
         if self.path == '/api/health':
-            return self.respond(200,{'service':'auditor-fiscal','demo':DEMO_MODE,'version':'startup-diagnostics-1'})
+            return self.respond(200,{'service':'auditor-fiscal','demo':DEMO_MODE,'version':'local-cozy-access-1'})
         elif self.path == '/api/demo-files':
             import io
             from zipfile import ZipFile, ZIP_DEFLATED
@@ -206,19 +256,28 @@ class Handler(BaseHTTPRequestHandler):
                 print('Erro ao ler o banco: '+str(error),flush=True)
                 return self.respond(503,{'error':'O banco de dados não pôde ser lido. Feche outras janelas do programa e execute Diagnosticar-Demonstracao-Windows.bat. Nenhum cadastro foi apagado.'})
             self.respond(200,result)
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js','/security.js','/inspiration.js','/carteira-theme.css'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
         else: self.respond(404,{'error':'Não encontrado'})
 
     def do_POST(self):
-        if self.headers.get('Origin') and self.headers['Origin'] != 'http://'+self.headers.get('Host',''):
-            return self.respond(403,{'error':'Origem não permitida'})
+        if not self.guard(writing=True):return
         try:
             size = int(self.headers.get('Content-Length','0'))
-            if size>(30_000_000 if self.path=='/api/sped_import' else 6_000_000): raise ValueError('Arquivo muito grande')
+            limit=16_384 if self.path in ('/api/setup','/api/login','/api/password') else (30_000_000 if self.path=='/api/sped_import' else 6_000_000)
+            if size<0 or size>limit: raise ValueError('Tamanho de requisição não permitido')
             data = json.loads(self.rfile.read(size))
+            if not isinstance(data,dict):raise ValueError('Formato de dados inválido')
+            if self.path in ('/api/setup','/api/login','/api/password'):
+                control=self.access()
+                if self.path=='/api/setup':cookie=control.setup(data.get('password'),data.get('confirmation'))
+                elif self.path=='/api/login':cookie=control.login(data.get('password'))
+                else:cookie=control.change(data.get('current'),data.get('password'),data.get('confirmation'))
+                return self.respond(200,{'ok':True},headers={'Set-Cookie':cookie})
+            if self.path=='/api/logout':return self.respond(200,{'ok':True},headers={'Set-Cookie':self.access().logout(self.headers.get('Cookie'))})
+            if self.path=='/api/touch':return self.respond(200,{'ok':True})
             with connect() as db:
                 if self.path == '/api/carteira': result = carteira.save(db,data['state'],data['revision'],log)
                 elif self.path == '/api/carteira_import': result = carteira.import_html(db,data['content'],data['revision'],log)
