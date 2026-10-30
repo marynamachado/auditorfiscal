@@ -31,21 +31,19 @@ Feche o programa e copie toda a pasta `data` para um local seguro. Para restaura
 
 Execute `python3 -m unittest discover -s tests -v`. Os testes usam banco temporário e não alteram seus dados.
 
-## Agenda e clientes dos escritórios
+## Carteira original integrada
 
-Abra **Agenda e Clientes** no menu. As carteiras representam escritórios ou grupos atendidos; cada cliente é também uma empresa do módulo fiscal. O responsável da carteira pode ser alterado em **Carteiras**.
+Abra **Agenda e Clientes** no menu. A própria interface da Carteira do Danillo agora aparece dentro do sistema: cartões coloridos por cliente, carteiras, pesquisa, competência, calendário, calculadora, tarefas e checklists, notas coloridas, honorários e contatos, repetições mensais, conclusão/reabertura de trabalho por empresa, resumo de conclusões, check-in diário, backup e restauração.
 
-Na seção **Trazer dados da agenda antiga**, selecione `Carteira_Danillo_Offline.html` e clique em **Importar clientes e agenda**. O HTML fornecido contém os 72 cadastros iniciais: 52 da Carteira Royal e 20 de Terceirizados. Nenhum prazo ou honorário será inventado. O importador extrai apenas dados JSON e não executa scripts do arquivo. CNPJ incompleto e regime não informado são sinalizados para revisão, sem completar dígitos por suposição.
+Os dados são salvos no SQLite do sistema a cada alteração. Não há dependência de localStorage. A carteira mantém todos os detalhes do formato original, inclusive modelos de repetição, cores, etapas e conclusões. Os cadastros e atividades também são refletidos nas tabelas do sistema. Se outra janela salvar uma revisão mais recente, a gravação é bloqueada até recarregar, para evitar perder alterações.
 
-As tarefas e alterações que você fez na agenda antiga ficam no navegador, não dentro do HTML. Para trazê-las, abra a agenda antiga no mesmo navegador e perfil, clique em **Backup**, salve o JSON e importe esse JSON na nova tela. Faça essa importação também no Windows: os dados do ambiente na nuvem não são sincronizados com seu computador.
+Os clientes já importados na versão anterior aparecem automaticamente. Se estiver começando no Windows, use **Importar clientes do HTML** no topo da carteira e selecione `Carteira_Danillo_Offline.html`: o arquivo contém 72 cadastros iniciais (52 Royal e 20 Terceirizados). O código distribuído pelo GitHub não contém os dados reais dos clientes. O importador lê dados JSON sem executar o HTML enviado.
 
-A importação acrescenta dados sem substituir registros existentes. Reimportar os mesmos dados não duplica clientes nem tarefas. Cadastros existentes são associados por CNPJ/identificador e preservados, inclusive dados revisados. Para corrigir razão social, CNPJ ou regime, abra o cartão do cliente e use **Revisar cadastro da empresa**. Para atualizar contato, honorário ou escritório, use o formulário de contato. Honorários não representam pagamentos recebidos.
+Para trazer tarefas e alterações feitas na agenda antiga, abra-a no mesmo navegador e perfil em que a utilizava, baixe seu backup JSON e use **Backup e ajuda → Restaurar** na carteira integrada. A restauração substitui o conteúdo da carteira e baixa uma cópia de segurança antes. Repetições mensais são preservadas e voltam a gerar ocorrências futuras como na agenda original. A carteira precisa estar aberta para gerar novas ocorrências; não há avisos com o sistema fechado. Datas não são ajustadas por feriados.
 
-Use os filtros por escritório, nome/CNPJ/contato, competência e situação. O calendário mostra os prazos do mês, inclusive de tarefas de outra competência; clicar no dia filtra a lista pelos vencimentos. Cada cliente tem tarefas, anotações coloridas e uma conclusão de trabalho por mês. Concluir trabalho na agenda exige finalizar suas tarefas do mês e **não fecha a competência fiscal**. Reabrir uma tarefa reabre a conclusão do trabalho. Clientes sem tarefas podem ser marcados manualmente como concluídos; o percentual considera todos os clientes da carteira selecionada.
+Excluir cliente remove seu cartão, tarefas, notas, repetições e conclusões da carteira. O cadastro fiscal e os documentos fiscais são preservados. As conclusões e reaberturas da carteira acompanham o trabalho do escritório e não fecham/reabrem competências fiscais nem transmitem obrigações. Honorários informados não comprovam pagamento. CNPJs e regimes incompletos permanecem sinalizados no cadastro fiscal para revisão.
 
-Novas tarefas podem gerar 3, 6 ou 12 ocorrências mensais independentes, ajustadas ao último dia do mês, sem ajustes de feriados. No backup antigo, as ocorrências já geradas e seus checklists são importados; modelos de recorrência futura não são ativados automaticamente. Checklists importados ficam disponíveis para consulta. Não há avisos quando o sistema está fechado.
-
-**Baixar backup da agenda** exporta clientes, carteiras, tarefas, anotações, conclusões e check-ins em JSON. Esse backup não inclui XMLs, escrita fiscal nem apurações: para uma cópia completa, use a pasta `data` com o sistema fechado. Os dados reais ficam no SQLite local e não são incluídos no código distribuído pelo GitHub.
+O backup JSON da carteira inclui clientes, tarefas, etapas, notas, carteiras, repetições, check-ins e conclusões. Para incluir XMLs, escrita fiscal e todos os dados do sistema, feche o programa e copie a pasta `data`. Os dados da nuvem não são sincronizados com o Windows.
 
 ## Atualizar uma instalação Windows existente
 

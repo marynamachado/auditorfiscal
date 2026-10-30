@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import agenda
+import carteira
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
@@ -26,6 +27,7 @@ def connect():
     CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, created TEXT NOT NULL, action TEXT NOT NULL);
     ''')
     agenda.migrate(db)
+    carteira.migrate(db)
     return db
 
 def log(db, action):
@@ -154,11 +156,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path == '/api/agenda-backup':
+        if self.path == '/api/carteira':
+            with connect() as db: self.respond(200,carteira.read(db))
+        elif self.path == '/api/agenda-backup':
             with connect() as db: self.respond(200,agenda.backup(db))
         elif self.path == '/api/state':
             with connect() as db: self.respond(200,state(db))
-        elif self.path in ('/','/style.css','/app.js','/agenda.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
@@ -171,12 +175,23 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get('Content-Length','0'))
             if size>6_000_000: raise ValueError('Arquivo muito grande')
             data = json.loads(self.rfile.read(size))
-            with connect() as db: result = mutate(db,self.path.removeprefix('/api/'),data)
+            with connect() as db:
+                if self.path == '/api/carteira': result = carteira.save(db,data['state'],data['revision'],log)
+                elif self.path == '/api/carteira_import': result = carteira.import_html(db,data['content'],data['revision'],log)
+                else: result = mutate(db,self.path.removeprefix('/api/'),data)
             self.respond(200,result)
+        except carteira.Conflict as e:
+            self.respond(409,{'error':str(e)})
         except (ValueError,KeyError,ET.ParseError,sqlite3.IntegrityError) as e:
             self.respond(400,{'error':str(e)})
 
 if __name__=='__main__':
     with connect(): pass
+    server = ThreadingHTTPServer(('127.0.0.1',8000),Handler)
     print('Auditor Fiscal iniciado. Abra http://127.0.0.1:8000',flush=True)
-    ThreadingHTTPServer(('127.0.0.1',8000),Handler).serve_forever()
+    import sys
+    if '--open-browser' in sys.argv:
+        import threading
+        import webbrowser
+        threading.Timer(0.5,lambda: webbrowser.open('http://127.0.0.1:8000')).start()
+    server.serve_forever()
