@@ -9,9 +9,11 @@ import xml.etree.ElementTree as ET
 import agenda
 import carteira
 import sped
+import demo_data
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get('FISCAL_DB', str(ROOT / 'data' / 'fiscal.sqlite3')))
+DEMO_MODE = False
 
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +61,9 @@ def import_xml(db, period_id, xml):
     inf = root if root.tag == 'infNFe' else root.find('.//infNFe')
     if inf is None or inf.findtext('ide/mod') != '55':
         raise ValueError('Envie um XML de NF-e modelo 55')
+    is_demo=demo_data.MARKER in xml
+    if is_demo and not DEMO_MODE:raise ValueError('Documento fictício do kit: abra Iniciar-Demonstracao-Windows.bat para testar em banco separado')
+    if DEMO_MODE and not is_demo:raise ValueError('Use somente os XMLs fictícios do kit no modo demonstração')
     key = inf.get('Id', '').removeprefix('NFe')
     if len(key) != 44 or not key.isdigit():
         raise ValueError('Chave de acesso inválida')
@@ -99,7 +104,14 @@ def import_xml(db, period_id, xml):
     return {'imported': True}
 
 def mutate(db, action, data):
-    if action == 'sped_import': return sped.import_file(db,data,log)
+    if action in ('demo_reset','demo_load'):
+        import demo
+        return demo.reset(db) if action=='demo_reset' else demo.load_scenario(db,data['scenario'])
+    if action == 'sped_import':
+        is_demo=demo_data.MARKER in data.get('content','')
+        if is_demo and not DEMO_MODE:raise ValueError('SPED didático: use o modo demonstração em banco separado')
+        if DEMO_MODE and not is_demo:raise ValueError('Use somente o SPED fictício do kit no modo demonstração')
+        return sped.import_file(db,data,log)
     if action == 'sped_compare': return sped.compare(db,int(data['sped_id']),log)
     if action.startswith('agenda_'):
         return agenda.mutate(db,action,data,log)
@@ -148,6 +160,8 @@ def state(db):
     result['settlements']=settlements
     result.update(agenda.state(db))
     result.update(sped.state(db))
+    import demo
+    result['demo']=demo.info(db)
     return result
 
 class Handler(BaseHTTPRequestHandler):
@@ -162,7 +176,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path.startswith('/api/sped-report?'):
+        if self.path == '/api/demo-files':
+            import io
+            from zipfile import ZipFile, ZIP_DEFLATED
+            output=io.BytesIO()
+            with ZipFile(output,'w',ZIP_DEFLATED) as archive:
+                for name,content in demo_data.files().items():archive.writestr('Kit-Demonstracao/'+name,content)
+            return self.respond(200,output.getvalue(),'application/zip',{'Content-Disposition':'attachment; filename="Kit-Demonstracao-Auditor-Fiscal.zip"'})
+        elif self.path.startswith('/api/sped-report?'):
             from urllib.parse import urlsplit, parse_qs
             try:
                 ident=int(parse_qs(urlsplit(self.path).query)['id'][0])
@@ -176,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db: self.respond(200,agenda.backup(db))
         elif self.path == '/api/state':
             with connect() as db: self.respond(200,state(db))
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')
@@ -199,13 +220,17 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,KeyError,ET.ParseError,sqlite3.IntegrityError) as e:
             self.respond(400,{'error':str(e)})
 
-if __name__=='__main__':
+def run(port=8000,open_browser=False):
     with connect(): pass
-    server = ThreadingHTTPServer(('127.0.0.1',8000),Handler)
-    print('Auditor Fiscal iniciado. Abra http://127.0.0.1:8000',flush=True)
-    import sys
-    if '--open-browser' in sys.argv:
+    server = ThreadingHTTPServer(('127.0.0.1',port),Handler)
+    url=f'http://127.0.0.1:{port}'
+    print('Auditor Fiscal iniciado. Abra '+url,flush=True)
+    if open_browser:
         import threading
         import webbrowser
-        threading.Timer(0.5,lambda: webbrowser.open('http://127.0.0.1:8000')).start()
+        threading.Timer(0.5,lambda: webbrowser.open(url)).start()
     server.serve_forever()
+
+if __name__=='__main__':
+    import sys
+    run(open_browser='--open-browser' in sys.argv)

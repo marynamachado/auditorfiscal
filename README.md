@@ -11,6 +11,26 @@ Aplicação web local com Python 3.12+ e SQLite, sem dependências externas. Os 
 
 No macOS/Linux: dentro da pasta, execute `python3 app.py` e abra o mesmo endereço. Para parar, pressione Ctrl+C no terminal. Não abra apenas o arquivo HTML.
 
+## Testar com empresa fictícia, sem usar clientes reais
+
+No Windows, abra **Iniciar-Demonstracao-Windows.bat**, mantenha a janela aberta e aguarde o navegador abrir. A página **Como testar** mostra a empresa já cadastrada e o selo **DEMONSTRAÇÃO**. No macOS/Linux, execute `python3 demo.py --open-browser`.
+
+A demonstração usa **outro banco**, `data/demonstracao.sqlite3`, e a porta local 8001. Ela ignora `FISCAL_DB` e não substitui `data/fiscal.sqlite3`. Reabrir a demonstração preserva as alterações de teste. O banco inicial contém carteira, empresa, CNPJ exemplificativo, regime, CNAE, IE fictícia, município/UF, contato, honorário, tarefas, checklists, nota colorida e competências 10/2026 e 11/2026. Endereço e parâmetros estão também no JSON do kit.
+
+Em **Como testar**, clique em **Baixar kit de teste** e use **Extrair tudo**. O ZIP inclui 16 arquivos: XMLs, SPEDs didáticos, cadastro fictício, resultados esperados e roteiro. Você pode importar os arquivos manualmente para exercitar o fluxo, ou clicar em **Carregar cenário automaticamente** para ver o resultado pronto. A carga automática exige uma competência sem notas; ela não apaga notas já importadas.
+
+| Cenário | Resultado esperado |
+| --- | --- |
+| Correto — 10/2026 | 3 notas, nenhum alerta de XML, 3 C100 correspondentes, nenhuma diferença nos campos comparados; ICMS simulado: R$ 450 de débitos, R$ 180 de créditos potenciais, R$ 270 de saldo. O fechamento fiscal é permitido após conferir. |
+| Alertas — 11/2026 | Lote de 7 XMLs: 3 importados, 1 duplicado, 3 rejeitados. Auditoria: NCM ausente e duplicidade. SPED: 4 C100 no escopo, 2 chaves correspondentes, 5 ocorrências para revisão e 1 nota cancelada fora do escopo. O fechamento fiscal é bloqueado pelos alertas de XML. |
+| XML extra — após o cenário de alertas | Importar a nota 9999 torna o relatório desatualizado. Conferir novamente reduz de 5 para 4 ocorrências e altera o saldo simulado para R$ 288. |
+
+O roteiro cobre os recursos implementados, incluindo carteira, notas, escrita, simulação de apuração, auditoria, relatórios, conclusões da carteira, fechamento fiscal, histórico, persistência e backup. **Não testa módulos futuros**: busca SEFAZ, integração direta ao Domínio, CT-e/NFS-e, SPED completo, correções, transmissão, reforma tributária ou folha.
+
+Use **Reiniciar somente os dados de demonstração** para repetir do início. Essa ação apaga todas as alterações daquele banco de teste e recria o cadastro inicial; o banco normal permanece separado. O servidor recusa essa ação no modo normal e recusa substituir um banco sem a identificação de demonstração. Os documentos do kit são bloqueados no modo normal; o modo de demonstração aceita apenas documentos identificados como pertencentes ao kit.
+
+Os documentos são sintéticos: XMLs com ambiente de homologação, sem assinatura ou protocolo; SPED simplificado que não foi validado no PVA. As alíquotas e valores são escolhidos para facilitar o teste, sem aplicação das regras legais do estado. IE, CEP e contatos são exemplificativos. Não houve consulta cadastral e nenhuma associação a empresas reais é afirmada. **Não enviar os documentos ao Domínio, ao PVA ou ao Fisco.**
+
 ## Primeiro uso
 
 Cadastre uma carteira e seu responsável, depois uma empresa com CNPJ válido. Abra a competência do mês e importe os XMLs de NF-e modelo 55 da empresa e do mesmo mês. Confira notas, itens e alertas antes de fechar. Duplicidades são bloqueadas e registradas. Competências com alertas de XML ou sem notas não podem ser fechadas. A resolução desses alertas ainda não está disponível.
