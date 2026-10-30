@@ -27,7 +27,7 @@ def prepare_migration_backup(path):
     if not path.exists() or path.stat().st_size==0:return None
     with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=3)) as db:
         tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        needed={'fiscal_cases','fiscal_rules','fiscal_entries','fiscal_events','fiscal_reviews','fiscal_finding_reviews','fiscal_closures'}
+        needed={'fiscal_cases','fiscal_rules','fiscal_entries','fiscal_events','fiscal_reviews','fiscal_finding_reviews','fiscal_closures','routine_profiles','routine_catalog','routine_classifications','routine_obligations'}
         if needed.issubset(tables) and {'code','invoice_id'}.issubset({r[1] for r in db.execute('PRAGMA table_info(findings)')}) and {'reviewed_at','revision'}.issubset({r[1] for r in db.execute('PRAGMA table_info(fiscal_events)')}):
             return None
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')

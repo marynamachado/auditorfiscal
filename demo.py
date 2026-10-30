@@ -43,7 +43,7 @@ def seed(db):
 
 def reset(db):
     require_demo(db)
-    for table in ('demo_runs','fiscal_closures','fiscal_reviews','fiscal_finding_reviews','fiscal_cases','fiscal_entries','fiscal_rules','fiscal_events','sped_audits','sped_files','items','invoices','findings','agenda_tasks','agenda_notes','agenda_closures','agenda_checkins','agenda_sources','carteira_document','periods','companies','wallets','history'):
+    for table in ('demo_runs','routine_obligations','routine_classifications','routine_catalog','routine_profiles','fiscal_closures','fiscal_reviews','fiscal_finding_reviews','fiscal_cases','fiscal_entries','fiscal_rules','fiscal_events','sped_audits','sped_files','items','invoices','findings','agenda_tasks','agenda_notes','agenda_closures','agenda_checkins','agenda_sources','carteira_document','periods','companies','wallets','history'):
         db.execute('DELETE FROM '+table)
     populate(db)
     return {'ok':True}

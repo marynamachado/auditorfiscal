@@ -13,6 +13,7 @@ import demo_data
 import security
 import fiscal
 import recovery
+import rotina
 import threading
 import secrets
 
@@ -45,6 +46,7 @@ def connect():
         carteira.migrate(db)
         sped.migrate(db)
         fiscal.migrate(db)
+        rotina.migrate(db)
         return db
     except Exception:
         db.close()
@@ -122,6 +124,7 @@ def import_xml(db, period_id, xml):
     return {'imported': True}
 
 def mutate(db, action, data):
+    if action.startswith('routine_'):return rotina.mutate(db,action,data,log)
     if action.startswith('fiscal_'):return fiscal.mutate(db,action,data,log)
     if action in ('demo_reset','demo_load'):
         import demo
@@ -187,6 +190,7 @@ def state(db):
     result.update(agenda.state(db))
     result.update(sped.state(db))
     result.update(fiscal.state(db))
+    result.update(rotina.state(db))
     import demo
     result['demo']=demo.info(db)
     return result
@@ -279,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
                 print('Erro ao ler o banco: '+str(error),flush=True)
                 return self.respond(503,{'error':'O banco de dados não pôde ser lido. Feche outras janelas do programa e execute Diagnosticar-Demonstracao-Windows.bat. Nenhum cadastro foi apagado.'})
             self.respond(200,result)
-        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js','/security.js','/inspiration.js','/carteira-theme.css','/fiscal.js'):
+        elif self.path in ('/','/style.css','/app.js','/agenda.js','/carteira.html','/carteira.js','/sped.js','/demo.js','/request.js','/security.js','/inspiration.js','/carteira-theme.css','/fiscal.js','/rotina.js'):
             name = 'index.html' if self.path=='/' else self.path[1:]
             kind = {'html':'text/html','css':'text/css','js':'text/javascript'}[name.split('.')[-1]]
             self.respond(200,(ROOT/'static'/name).read_bytes(),kind+'; charset=utf-8')

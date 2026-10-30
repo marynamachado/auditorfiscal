@@ -14,3 +14,5 @@ aside{overflow-y:auto}aside nav{flex-shrink:0}aside>small{padding-top:24px}.insp
 progress{height:8px;border:0;border-radius:8px;overflow:hidden;background:#e6e8db}progress::-webkit-progress-bar{background:#e6e8db}progress::-webkit-progress-value{background:#779867;border-radius:8px}progress::-moz-progress-bar{background:#779867;border-radius:8px}
 
 .pilot-fields{border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:14px;align-items:end;width:100%;min-width:0}details{margin:18px 0}summary{cursor:pointer;color:#456747;font-weight:600;padding:10px 0}details form{margin-top:16px}.pilot-fields label{min-width:190px}.pilot-fields:disabled{opacity:.65}
+
+.routine-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.routine-tabs button{min-height:42px}.panel textarea{min-height:90px;resize:vertical;max-width:100%}

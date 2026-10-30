@@ -1,4 +1,4 @@
-const pages=['Dashboard','Agenda e Clientes','Carteiras','Empresas','Competências','Importação XML','Escrita Fiscal','Apuração ICMS','Apuração assistida GO','Auditoria','Conferência SPED','Histórico','Como testar','Segurança e Backup'];
+const pages=['Dashboard','Rotina Fiscal','Agenda e Clientes','Carteiras','Empresas','Competências','Importação XML','Escrita Fiscal','Apuração ICMS','Apuração assistida GO','Auditoria','Conferência SPED','Histórico','Como testar','Segurança e Backup'];
 let state={},page='Dashboard',firstLoad=true;
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -32,6 +32,7 @@ function render(){
  if(page==='Agenda e Clientes')html='<iframe class=carteira-frame title="Carteira de clientes do Danillo" src="/carteira.html"></iframe>';
  if(page==='Segurança e Backup')html=renderSecurity();
  if(page==='Como testar')html=renderDemo();
+ if(page==='Rotina Fiscal')html=renderRoutine();
  if(page==='Carteiras')html=panel('Nova carteira',form('wallet',field('name','Nome da carteira')+field('responsible','Responsável')))+panel('Suas carteiras',table(['Carteira','Responsável','Ações'],s.wallets.map(w=>[esc(w.name),esc(w.responsible),`<button data-edit="${w.id}" class="secondary">Editar</button><button data-delete="${w.id}" class="danger">Excluir</button>`])));
  if(page==='Empresas')html=panel('Cadastrar empresa',form('company',field('cnpj','CNPJ')+field('name','Razão social')+select('regime','Regime',[['Normal','Normal'],['Simples Nacional','Simples Nacional (cadastro)'],['Lucro Real','Lucro Real'],['Lucro Presumido','Lucro Presumido'],['MEI','MEI']])+field('cnae','CNAE')+field('ie','Inscrição estadual')+field('city','Município')+field('uf','UF')+select('wallet_id','Carteira',s.wallets.map(w=>[w.id,w.name]))+field('icms_rate','Alíquota de referência (%)','number','18')))+panel('Empresas',table(['Razão social','CNPJ','Regime','Carteira / escritório','Revisão'],s.companies.map(c=>[esc(c.name),esc(c.cnpj),esc(c.regime),esc(s.wallets.find(w=>w.id===c.wallet_id)?.name||'—'),esc(c.review||'—')])))+'<p class="muted">A alíquota é um parâmetro cadastral; a simulação atual usa os valores destacados no XML.</p>';
  if(page==='Competências')html=panel('Abrir competência',form('period',select('company_id','Empresa',s.companies.map(c=>[c.id,c.name]))+field('month','Competência','month')))+panel('Competências mensais',table(['Empresa','Mês','Situação','Ação'],s.periods.map(p=>[esc(company(p.company_id)),esc(p.month),p.closed?'Fechada':'Aberta',p.closed?'Registrado no histórico':`<button data-close="${p.id}">Fechar competência</button>`])));

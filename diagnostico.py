@@ -17,7 +17,7 @@ def collect(port=8001, emit=None):
         lines.append(message)
         if emit:emit(message)
     if sys.version_info<(3,9):log('ATENÇÃO: Python antigo. Instale Python 3.12 ou mais recente.')
-    required=('app.py','demo.py','demo_data.py','agenda.py','carteira.py','sped.py','static/index.html','static/app.js','static/demo.js','static/request.js','static/style.css','security.py','static/security.js','static/inspiration.js','static/carteira-theme.css','fiscal.py','recovery.py','static/fiscal.js','validar_ambiente.py')
+    required=('app.py','demo.py','demo_data.py','agenda.py','carteira.py','sped.py','static/index.html','static/app.js','static/demo.js','static/request.js','static/style.css','security.py','static/security.js','static/inspiration.js','static/carteira-theme.css','fiscal.py','recovery.py','static/fiscal.js','validar_ambiente.py','rotina.py','static/rotina.js')
     log('Conferindo os arquivos...')
     missing=[name for name in required if not (ROOT/name).is_file()]
     log('Arquivos do programa: '+('OK' if not missing else 'FALTANDO: '+', '.join(missing)))

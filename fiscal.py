@@ -5,6 +5,7 @@ caso externo. Isso não equivale a homologação fiscal ou auditoria independent
 """
 import hashlib
 import json
+import rotina
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_DOWN
 import xml.etree.ElementTree as ET
@@ -124,9 +125,11 @@ def case_report(db,case):
     if pending_findings(db,pid):blockers.append('Há alertas de XML pendentes; esta etapa não resolve inconsistências estruturais')
     if any(e['status']=='pendente' for e in events):blockers.append('Há eventos de cancelamento aguardando conferência')
     fiscal_company={k:company[k] for k in ('id','cnpj','name','regime','city','uf','cnae','ie')}
-    snapshot=hashlib.sha256(json.dumps({'case':case,'company':fiscal_company,'entries':entries,'rules':rules,'invoices':invoices,'items':items,'events':events,'findings':findings,'finding_reviews':finding_reviews,'sped_digest':sped['digest'] if sped else None},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    month=db.execute('SELECT month FROM periods WHERE id=?',(pid,)).fetchone()['month']
+    routine=rotina.tax_snapshot(db,company['id'],month,pid)
+    snapshot=hashlib.sha256(json.dumps({'case':case,'company':fiscal_company,'routine':routine,'entries':entries,'rules':rules,'invoices':invoices,'items':items,'events':events,'findings':findings,'finding_reviews':finding_reviews,'sped_digest':sped['digest'] if sped else None},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     last=db.execute('SELECT * FROM fiscal_reviews WHERE case_id=? ORDER BY id DESC LIMIT 1',(case['id'],)).fetchone()
-    return {'case':case,'company_fiscal_snapshot':fiscal_company,'totals':report,'differences':differences,'blockers':blockers,'snapshot':snapshot,'review_current':bool(last and last['snapshot']==snapshot and not blockers),'last_review':dict(last) if last else None}
+    return {'case':case,'company_fiscal_snapshot':fiscal_company,'routine_snapshot':routine,'totals':report,'differences':differences,'blockers':blockers,'snapshot':snapshot,'review_current':bool(last and last['snapshot']==snapshot and not blockers),'last_review':dict(last) if last else None}
 
 def close_check(db,pid):
     if db.execute("SELECT 1 FROM fiscal_events WHERE period_id=? AND status='pendente'",(pid,)).fetchone():raise ValueError('Confira os eventos de cancelamento antes de fechar')

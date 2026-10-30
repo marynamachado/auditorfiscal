@@ -74,6 +74,10 @@ Pedidos com Host inesperado ou origem de outro site são recusados, e as APIs de
 
 Execute `python3 -m unittest discover -s tests -v`. Os testes usam banco temporário e não alteram seus dados.
 
+### Rotina Fiscal do escritório
+
+O menu **Rotina Fiscal** reúne as cinco etapas solicitadas: cadastro/parâmetros, auxiliares, documentos, apuração e acompanhamento de obrigações. Permite registrar contador/CRC declarados, sócios e endereço, parâmetros com vigência mensal, acumuladores versionados, produtos/serviços, terceiros por CNPJ e classificação manual das notas. Os auxiliares ainda não aplicam tributação automaticamente. O acompanhamento de obrigações registra trabalho feito externamente e exige evidência para avançar; não gera guias ou arquivos nem transmite declarações. Consulte o [escopo e roteiro de teste](docs/ROTINA_FISCAL.md) para distinguir os recursos disponíveis dos módulos pendentes. Não há consulta automática à Receita, SEFAZ ou conselhos profissionais.
+
 ### Piloto assistido em Goiás
 
 Abra **Apuração assistida GO** para cadastrar um caso por empresa e competência, informar os resultados de referência de um mês fechado no Domínio e registrar parâmetros com responsável e fundamentação. O piloto calcula lançamentos explícitos de ICMS, PIS, COFINS, IPI e ISS, com arredondamento escolhido, créditos informados, ajustes, estornos e saldo credor. Não determina automaticamente o enquadramento, a alíquota legal ou o direito ao crédito. A vigência das regras é mensal. O DAS do Simples/MEI ainda não é calculado; seu valor pode ser guardado somente como referência pendente.
